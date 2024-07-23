@@ -1,48 +1,46 @@
 import os
-import psycopg2
+import boto3
 import pandas as pd
-from psycopg2.extras import RealDictCursor
+from botocore.exceptions import NoCredentialsError
 
-def connect_to_postgres():
-    # Get credentials from environment variables
-    host = os.getenv('host')
-    port = os.getenv('port', 5432)
-    database = os.getenv('database')
-    user = os.getenv('user')
-    password = os.getenv('password')
-    table = os.getenv('table')
+def connect_to_s3_and_load_data():
+    # Get the credentials from environment variables
+    aws_access_key_id = os.getenv('aws_access_key_id')
+    aws_secret_access_key = os.getenv('aws_secret_access_key')
+    bucket = os.getenv('bucket')
+    region = os.getenv('region')
+    key = os.getenv('key')
 
-    # Connect to PostgreSQL
-    try:
-        conn = psycopg2.connect(host=host, port=port, database=database, user=user, password=password)
-    except psycopg2.Error as e:
-        print(f"Error connecting to PostgreSQL: {e}")
+    # Check if the credentials are available
+    if aws_access_key_id is None or aws_secret_access_key is None or bucket is None or region is None or key is None:
+        print("Error: Missing credentials")
         return
 
-    # Open a cursor to perform database operations
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    # Create a session using the credentials
+    session = boto3.Session(
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region
+    )
 
-    # Query the database
+    # Create a S3 resource using the session
+    s3 = session.resource('s3')
+
+    # Try to download the file
     try:
-        cur.execute(f"SELECT * FROM {table}")
-    except psycopg2.Error as e:
-        print(f"Error executing query: {e}")
+        s3.Bucket(bucket).download_file(key, 'data.csv')
+    except NoCredentialsError:
+        print("Error: No credentials found")
         return
 
-    # Fetch all the records
-    rows = cur.fetchall()
+    # Load the data into a pandas DataFrame
+    df = pd.read_csv('data.csv')
 
-    # Prepare a data frame
-    df = pd.DataFrame(rows)
-
-    # Print the top 5 rows
-    print(df.head())
+    # Print the top 5 rows of the DataFrame
+    print(df.head(5))
 
     # Print data extraction successful
     print("Data extraction successful")
 
-    # Store the dataframe as data.csv file
-    df.to_csv('data.csv', index=False)
-
 # Call the function
-connect_to_postgres()
+connect_to_s3_and_load_data()
